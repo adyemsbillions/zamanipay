@@ -85,11 +85,36 @@ const Signup = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+   
+      const response = await fetch('http://192.168.78.38/zamanipay/backend/signup.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: fullName,
+          email,
+          phone_number: phoneNumber,
+          pin: pinString,
+          confirm_pin: confirmPinString,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        Alert.alert("Success", result.message);
+        router.push("/login");
+      } else {
+        Alert.alert("Error", result.message);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Network error: " + error.message);
+    } finally {
       setIsLoading(false);
-      Alert.alert("Success", "Account created successfully!");
-      router.push("/login");
-    }, 2000);
+    }
   };
 
   const BankIcon = () => (

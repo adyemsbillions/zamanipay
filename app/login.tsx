@@ -13,6 +13,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { useRouter } from "expo-router";
+import * as LocalAuthentication from 'expo-local-authentication';
 
 const { width, height } = Dimensions.get("window");
 
@@ -44,18 +45,78 @@ const Login = () => {
     }
   };
 
-  const handleLogin = async () => {
-    if (!email || pin.some((digit) => digit === "")) {
-      Alert.alert("Error", "Please fill in all fields");
+  const handleLogin = async (isBiometric = false) => {
+    if (!email) {
+      Alert.alert("Error", "Please enter your email");
       return;
     }
 
+    let pinString = '';
+    if (!isBiometric) {
+      pinString = pin.join("");
+      if (pinString.length !== 5) {
+        Alert.alert("Error", "Please enter a 5-digit PIN");
+        return;
+      }
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      const response = await fetch('http://192.168.78.38/zamanipay/backend/login.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          pin: isBiometric ? '' : pinString,
+          is_biometric: isBiometric,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        Alert.alert("Success", result.message);
+        router.push('/dashboard');
+      } else {
+        Alert.alert("Error", result.message);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Network error: " + error.message);
+    } finally {
       setIsLoading(false);
-      Alert.alert("Success", "Login successful!");
-      router.push('/dashboard'); // Uncomment when dashboard route is added
-    }, 2000);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    try {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      if (!compatible) {
+        Alert.alert("Error", "Device does not support biometrics");
+        return;
+      }
+
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!enrolled) {
+        Alert.alert("Error", "No biometrics enrolled on device");
+        return;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate with fingerprint',
+        fallbackLabel: 'Use PIN',
+      });
+
+      if (result.success) {
+        handleLogin(true);
+      } else {
+        Alert.alert("Error", "Biometric authentication failed");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Biometric error: " + error.message);
+    }
   };
 
   const EyeIcon = ({ show }) => (
@@ -86,15 +147,11 @@ const Login = () => {
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View style={styles.header}>
             <BankIcon />
             <Text style={styles.subtitleText}>Sign in to your account</Text>
           </View>
-
-          {/* Form */}
           <View style={styles.formContainer}>
-            {/* Email Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Email Address</Text>
               <TextInput
@@ -108,7 +165,6 @@ const Login = () => {
                 autoCorrect={false}
               />
             </View>
-            {/* PIN Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>PIN</Text>
               <View style={styles.pinContainer}>
@@ -136,40 +192,37 @@ const Login = () => {
                 </TouchableOpacity>
               </View>
             </View>
-            {/* Forgot Password */}
             <TouchableOpacity
               style={styles.forgotPasswordContainer}
               onPress={() => router.push("/forget_password")}
             >
               <Text style={styles.forgotPasswordText}>Forgot PIN?</Text>
             </TouchableOpacity>
-            {/* Login Button */}
             <TouchableOpacity
               style={[
                 styles.loginButton,
                 isLoading && styles.loginButtonDisabled,
               ]}
-              onPress={handleLogin}
+              onPress={() => handleLogin(false)}
               disabled={isLoading}
             >
               <Text style={styles.loginButtonText}>
                 {isLoading ? "Signing In..." : "Sign In"}
               </Text>
             </TouchableOpacity>
-            {/* Divider */}
             <View style={styles.dividerContainer}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>OR</Text>
               <View style={styles.dividerLine} />
             </View>
-            {/* Biometric Login */}
-            <TouchableOpacity style={styles.biometricButton}>
+            <TouchableOpacity 
+              style={styles.biometricButton}
+              onPress={handleBiometricLogin}
+            >
               <View style={styles.fingerprintIcon} />
               <Text style={styles.biometricText}>Use Fingerprint</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => router.push("/signup")}>
