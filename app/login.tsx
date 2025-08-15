@@ -1,3 +1,4 @@
+// login.tsx
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -63,7 +64,7 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://192.168.78.38/zamanipay/backend/login.php', {
+      const response = await fetch('http://192.168.216.38/zamanipay/backend/login.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -79,7 +80,15 @@ const Login = () => {
 
       if (result.success) {
         Alert.alert("Success", result.message);
-        router.push('/dashboard');
+        // Pass email and other data to the dashboard
+        router.push({
+          pathname: '/dashboard',
+          params: {
+            email,
+            full_name: result.data?.full_name || 'User',
+            user_id: result.data?.user_id || '',
+          },
+        });
       } else {
         Alert.alert("Error", result.message);
       }

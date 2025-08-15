@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// dashboard.tsx
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,44 +9,168 @@ import {
   ScrollView,
   Alert,
   SafeAreaView,
+  Modal,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get("window");
 
+const API_BASE_URL = 'http://192.168.216.38/zamanipay/backend';
+
 const Dashboard = () => {
-  const [balance] = useState("950,000");
-  const [accountNumber] = useState("9061512740");
+  const { email: paramEmail, full_name, user_id } = useLocalSearchParams();
+  const [email, setEmail] = useState(paramEmail || '');
+  const [balance, setBalance] = useState("0.00");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [contacts, setContacts] = useState([{ id: 0, name: "New", isAddNew: true }]);
+  const [transactions, setTransactions] = useState([]);
+  const [showFingerprintModal, setShowFingerprintModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const router = useRouter();
 
-  const favoriteContacts = [
-    { id: 1, name: "New", avatar: "👤", isAddNew: true },
-    { id: 2, name: "adyems", avatar: "👨🏽‍💼", color: "#8B4513" },
-    { id: 3, name: "Ellie", avatar: "👨🏻‍💻", color: "#4A90E2" },
-    { id: 4, name: "cindy", avatar: "👨🏽‍🦱", color: "#F5A623" },
-    { id: 5, name: "tamino", avatar: "👨🏻‍🎓", color: "#7ED321" },
-    { id: 6, name: "Bi...", avatar: "👩🏻‍💼", color: "#D0021B" },
-  ];
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!email) {
+        try {
+          const userData = await AsyncStorage.getItem('userData');
+          if (userData) {
+            const { email: storedEmail } = JSON.parse(userData);
+            setEmail(storedEmail);
+          }
+        } catch (error) {
+          console.error("Failed to load userData:", error.message);
+        }
+      }
+    };
+    loadUserData();
+  }, []);
 
-  const recentTransactions = [
-    {
-      id: 1,
-      type: "receive",
-      title: "Receive from Oji",
-      amount: "+₦200",
-      time: "Today, 07:23 AM",
-      isPositive: true,
-    },
-    {
-      id: 2,
-      type: "send",
-      title: "Send to Rizal",
-      amount: "-₦150",
-      time: "Yesterday, 05:23 PM",
-      isPositive: false,
-    },
-  ];
+const fetchDashboardData = async () => {
+  if (!email) {
+    console.log("No email provided to fetchDashboardData");
+    setError("No email provided. Please log in again.");
+    setIsLoading(false);
+    return;
+  }
+
+  try {
+    console.log("Fetching data for email:", email);
+    const response = await fetch(`${API_BASE_URL}/get_dashboard_data.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    console.log("Response status:", response.status);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error: ${response.status}, Response: ${errorText}`);
+    }
+
+    const responseText = await response.text();
+    console.log("Raw response:", responseText);
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (jsonError) {
+      throw new Error(`JSON Parse error: ${jsonError.message}, Response: ${responseText}`);
+    }
+    console.log("Parsed API response:", result);
+
+    if (result.success) {
+      setBalance(result.data?.balance || "0.00");
+      setAccountNumber(result.data?.account_number || "Not set");
+      setContacts([
+        { id: 0, name: "New", isAddNew: true },
+        ...(result.data?.contacts || []).map((c, i) => ({
+          id: i + 1,
+          name: c.contact_name || "Unknown",
+          avatar: c.avatar_emoji || "👤",
+          color: c.color || "#4A90E2",
+        })),
+      ]);
+      setTransactions(
+        (result.data?.transactions || []).map((t, i) => ({
+          ...t,
+          id: i + 1,
+        }))
+      );
+      if (!result.data?.has_fingerprint) {
+        setShowFingerprintModal(true);
+      }
+    } else {
+      setError(result.message || "Failed to load data");
+    }
+  } catch (error) {
+    console.error("Fetch error:", error.message);
+    setError(`Failed to fetch data: ${error.message}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
+  useEffect(() => {
+    if (email) {
+      console.log("Dashboard mounted with params:", { email, full_name, user_id });
+      console.log("State values:", { balance, accountNumber, contacts, transactions });
+      fetchDashboardData();
+    }
+  }, [email]);
+
+  const handleEnableFingerprint = async () => {
+    try {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      if (!compatible) {
+        Alert.alert("Error", "Device does not support biometrics");
+        return;
+      }
+
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!enrolled) {
+        Alert.alert("Error", "No biometrics enrolled on device");
+        return;
+      }
+
+      const authResult = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate to enable fingerprint',
+        fallbackLabel: 'Use PIN',
+      });
+
+      if (!authResult.success) {
+        Alert.alert("Error", "Biometric authentication failed");
+        return;
+      }
+
+      setIsLoading(true);
+
+      const response = await fetch(`${API_BASE_URL}/enable_fingerprint.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        Alert.alert("Success", result.message);
+        setShowFingerprintModal(false);
+      } else {
+        Alert.alert("Error", result.message);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Network error: " + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleCopyAccount = () => {
     Alert.alert("Copied", "Account number copied to clipboard");
@@ -79,15 +204,80 @@ const Dashboard = () => {
     Alert.alert("View All", "View all transactions");
   };
 
-  const handleBottomNavPress = (tab) => {
-    Alert.alert("Navigation", `${tab} tab pressed`);
-    // Example navigation: router.push(`/${tab.toLowerCase()}`);
+  const handleBottomNavPress = async (tab) => {
+    if (tab === "Account") {
+      try {
+        await AsyncStorage.removeItem('userData');
+        router.replace("/login");
+      } catch (error) {
+        Alert.alert("Error", "Failed to log out: " + error.message);
+      }
+    } else {
+      Alert.alert("Navigation", `${tab} tab pressed`);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={fetchDashboardData}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
+      <Modal
+        visible={showFingerprintModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowFingerprintModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Enable Fingerprint Login</Text>
+            <Text style={styles.modalText}>
+              Would you like to enable fingerprint login for faster and secure access?
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, isLoading && styles.modalButtonDisabled]}
+                onPress={handleEnableFingerprint}
+                disabled={isLoading}
+              >
+                <Text style={styles.modalButtonText}>
+                  {isLoading ? "Enabling..." : "Enable Fingerprint"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setShowFingerprintModal(false)}
+              >
+                <Text style={styles.modalButtonText}>Not Now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.appName}>ZamaniPay</Text>
           <View style={styles.headerRight}>
@@ -99,8 +289,6 @@ const Dashboard = () => {
             </View>
           </View>
         </View>
-
-        {/* Balance Card */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Main Balance</Text>
           <Text style={styles.balanceAmount}>₦{balance}</Text>
@@ -114,8 +302,6 @@ const Dashboard = () => {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.actionButton} onPress={handleRequest}>
             <MaterialIcons name="arrow-downward" size={24} color="#374151" />
@@ -130,8 +316,6 @@ const Dashboard = () => {
             <Text style={styles.actionButtonText}>QR Code</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Favorite Contacts */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Favorite</Text>
@@ -144,33 +328,35 @@ const Dashboard = () => {
             showsHorizontalScrollIndicator={false}
             style={styles.contactsContainer}
           >
-            {favoriteContacts.map((contact) => (
-              <TouchableOpacity
-                key={contact.id}
-                style={styles.contactItem}
-                onPress={() => handleContactPress(contact)}
-              >
-                <View
-                  style={[
-                    styles.contactAvatar,
-                    contact.isAddNew
-                      ? styles.addNewAvatar
-                      : { backgroundColor: contact.color },
-                  ]}
+            {contacts.length === 1 && contacts[0].isAddNew ? (
+              <Text style={styles.emptyText}>No favorite contacts yet</Text>
+            ) : (
+              contacts.map((contact) => (
+                <TouchableOpacity
+                  key={contact.id}
+                  style={styles.contactItem}
+                  onPress={() => handleContactPress(contact)}
                 >
-                  {contact.isAddNew ? (
-                    <Text style={styles.addNewIcon}>+</Text>
-                  ) : (
-                    <Text style={styles.contactEmoji}>{contact.avatar}</Text>
-                  )}
-                </View>
-                <Text style={styles.contactName}>{contact.name}</Text>
-              </TouchableOpacity>
-            ))}
+                  <View
+                    style={[
+                      styles.contactAvatar,
+                      contact.isAddNew
+                        ? styles.addNewAvatar
+                        : { backgroundColor: contact.color },
+                    ]}
+                  >
+                    {contact.isAddNew ? (
+                      <Text style={styles.addNewIcon}>+</Text>
+                    ) : (
+                      <Text style={styles.contactEmoji}>{contact.avatar}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.contactName}>{contact.name}</Text>
+                </TouchableOpacity>
+              ))
+            )}
           </ScrollView>
         </View>
-
-        {/* Recent Transactions */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Transaction</Text>
@@ -179,54 +365,56 @@ const Dashboard = () => {
             </TouchableOpacity>
           </View>
           <View style={styles.transactionsContainer}>
-            {recentTransactions.map((transaction) => (
-              <TouchableOpacity
-                key={transaction.id}
-                style={styles.transactionItem}
-              >
-                <View
-                  style={[
-                    styles.transactionIcon,
-                    transaction.type === "receive"
-                      ? styles.receiveIcon
-                      : styles.sendIconBg,
-                  ]}
+            {transactions.length === 0 ? (
+              <Text style={styles.emptyText}>No recent transactions</Text>
+            ) : (
+              transactions.map((transaction) => (
+                <TouchableOpacity
+                  key={transaction.id}
+                  style={styles.transactionItem}
                 >
-                  <MaterialIcons
-                    name={
+                  <View
+                    style={[
+                      styles.transactionIcon,
                       transaction.type === "receive"
-                        ? "arrow-downward"
-                        : "arrow-upward"
-                    }
-                    size={24}
-                    color={
-                      transaction.type === "receive" ? "#16a34a" : "#f59e0b"
-                    }
-                  />
-                </View>
-                <View style={styles.transactionDetails}>
-                  <Text style={styles.transactionTitle}>
-                    {transaction.title}
+                        ? styles.receiveIcon
+                        : styles.sendIconBg,
+                    ]}
+                  >
+                    <MaterialIcons
+                      name={
+                        transaction.type === "receive"
+                          ? "arrow-downward"
+                          : "arrow-upward"
+                      }
+                      size={24}
+                      color={
+                        transaction.type === "receive" ? "#16a34a" : "#f59e0b"
+                      }
+                    />
+                  </View>
+                  <View style={styles.transactionDetails}>
+                    <Text style={styles.transactionTitle}>
+                      {transaction.title}
+                    </Text>
+                    <Text style={styles.transactionTime}>{transaction.time}</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.transactionAmount,
+                      transaction.isPositive
+                        ? styles.positiveAmount
+                        : styles.negativeAmount,
+                    ]}
+                  >
+                    {transaction.amount > 0 ? `+₦${transaction.amount}` : `-₦${Math.abs(transaction.amount)}`}
                   </Text>
-                  <Text style={styles.transactionTime}>{transaction.time}</Text>
-                </View>
-                <Text
-                  style={[
-                    styles.transactionAmount,
-                    transaction.isPositive
-                      ? styles.positiveAmount
-                      : styles.negativeAmount,
-                  ]}
-                >
-                  {transaction.amount}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         </View>
       </ScrollView>
-
-      {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={[styles.navItem, styles.activeNavItem]}
@@ -287,7 +475,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 40, // Increased to push content down
+    paddingTop: 40,
     paddingBottom: 20,
   },
   appName: {
@@ -502,6 +690,92 @@ const styles = StyleSheet.create({
   activeNavText: {
     color: "#4f46e5",
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 24,
+    width: width * 0.8,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1f2937",
+    marginBottom: 16,
+  },
+  modalText: {
+    fontSize: 16,
+    color: "#6b7280",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  modalButton: {
+    flex: 1,
+    backgroundColor: "#1e40af",
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+    marginHorizontal: 8,
+  },
+  modalButtonDisabled: {
+    backgroundColor: "#9ca3af",
+  },
+  modalCancelButton: {
+    backgroundColor: "#6b7280",
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 18,
+    color: "#1f2937",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#dc2626",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#1e40af",
+    borderRadius: 8,
+    padding: 12,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    paddingVertical: 16,
   },
 });
 
