@@ -9,6 +9,7 @@ import {
   Animated,
 } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get("window");
 
@@ -71,9 +72,15 @@ const OnboardingScreen = () => {
     return () => clearInterval(timer);
   }, [fadeAnim]);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentIndex === onboardingData.length - 1) {
-      router.push("/login");
+      try {
+        // Store onboarding completion flag
+        await AsyncStorage.setItem('onboardingCompleted', 'true');
+        router.push("/login");
+      } catch (error) {
+        console.error("Failed to save onboarding completion:", error.message);
+      }
     } else {
       const nextIndex = (currentIndex + 1) % onboardingData.length;
       setCurrentIndex(nextIndex);

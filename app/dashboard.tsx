@@ -1,4 +1,3 @@
-// dashboard.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -49,72 +48,73 @@ const Dashboard = () => {
     loadUserData();
   }, []);
 
-const fetchDashboardData = async () => {
-  if (!email) {
-    console.log("No email provided to fetchDashboardData");
-    setError("No email provided. Please log in again.");
-    setIsLoading(false);
-    return;
-  }
-
-  try {
-    console.log("Fetching data for email:", email);
-    const response = await fetch(`${API_BASE_URL}/get_dashboard_data.php`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email }),
-    });
-
-    console.log("Response status:", response.status);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error: ${response.status}, Response: ${errorText}`);
+  const fetchDashboardData = async () => {
+    if (!email) {
+      console.log("No email provided to fetchDashboardData");
+      setError("No email provided. Please log in again.");
+      setIsLoading(false);
+      return;
     }
 
-    const responseText = await response.text();
-    console.log("Raw response:", responseText);
-
-    let result;
     try {
-      result = JSON.parse(responseText);
-    } catch (jsonError) {
-      throw new Error(`JSON Parse error: ${jsonError.message}, Response: ${responseText}`);
-    }
-    console.log("Parsed API response:", result);
+      console.log("Fetching data for email:", email);
+      const response = await fetch(`${API_BASE_URL}/get_dashboard_data.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
 
-    if (result.success) {
-      setBalance(result.data?.balance || "0.00");
-      setAccountNumber(result.data?.account_number || "Not set");
-      setContacts([
-        { id: 0, name: "New", isAddNew: true },
-        ...(result.data?.contacts || []).map((c, i) => ({
-          id: i + 1,
-          name: c.contact_name || "Unknown",
-          avatar: c.avatar_emoji || "👤",
-          color: c.color || "#4A90E2",
-        })),
-      ]);
-      setTransactions(
-        (result.data?.transactions || []).map((t, i) => ({
-          ...t,
-          id: i + 1,
-        }))
-      );
-      if (!result.data?.has_fingerprint) {
-        setShowFingerprintModal(true);
+      console.log("Response status:", response.status);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error: ${response.status}, Response: ${errorText}`);
       }
-    } else {
-      setError(result.message || "Failed to load data");
+
+      const responseText = await response.text();
+      console.log("Raw response:", responseText);
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        throw new Error(`JSON Parse error: ${jsonError.message}, Response: ${responseText}`);
+      }
+      console.log("Parsed API response:", result);
+
+      if (result.success) {
+        setBalance(result.data?.balance || "0.00");
+        setAccountNumber(result.data?.account_number || "Not set");
+        setContacts([
+          { id: 0, name: "New", isAddNew: true },
+          ...(result.data?.contacts || []).map((c, i) => ({
+            id: i + 1,
+            name: c.contact_name || "Unknown",
+            avatar: c.avatar_emoji || "👤",
+            color: c.color || "#4A90E2",
+          })),
+        ]);
+        setTransactions(
+          (result.data?.transactions || []).map((t, i) => ({
+            ...t,
+            id: i + 1,
+          }))
+        );
+        if (!result.data?.has_fingerprint) {
+          setShowFingerprintModal(true);
+        }
+      } else {
+        setError(result.message || "Failed to load data");
+      }
+    } catch (error) {
+      console.error("Fetch error:", error.message);
+      setError(`Failed to fetch data: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error) {
-    console.error("Fetch error:", error.message);
-    setError(`Failed to fetch data: ${error.message}`);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
+
   useEffect(() => {
     if (email) {
       console.log("Dashboard mounted with params:", { email, full_name, user_id });

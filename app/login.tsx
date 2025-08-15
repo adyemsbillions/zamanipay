@@ -1,5 +1,4 @@
-// login.tsx
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,6 +14,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get("window");
 
@@ -25,6 +25,23 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const pinRefs = useRef(pin.map(() => React.createRef()));
   const router = useRouter();
+
+  useEffect(() => {
+    const checkStoredUser = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const { email: storedEmail } = JSON.parse(userData);
+          setEmail(storedEmail);
+          // Attempt biometric login if user data exists
+          handleBiometricLogin(storedEmail);
+        }
+      } catch (error) {
+        console.error("Failed to load user data:", error.message);
+      }
+    };
+    checkStoredUser();
+  }, []);
 
   const handlePinChange = (text, index) => {
     if (/^[0-9]?$/.test(text)) {
@@ -46,8 +63,8 @@ const Login = () => {
     }
   };
 
-  const handleLogin = async (isBiometric = false) => {
-    if (!email) {
+  const handleLogin = async (isBiometric = false, loginEmail = email) => {
+    if (!loginEmail) {
       Alert.alert("Error", "Please enter your email");
       return;
     }
@@ -70,7 +87,7 @@ const Login = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email,
+          email: loginEmail,
           pin: isBiometric ? '' : pinString,
           is_biometric: isBiometric,
         }),
@@ -79,12 +96,17 @@ const Login = () => {
       const result = await response.json();
 
       if (result.success) {
+        // Store user data in AsyncStorage
+        await AsyncStorage.setItem('userData', JSON.stringify({
+          email: loginEmail,
+          full_name: result.data?.full_name || 'User',
+          user_id: result.data?.user_id || '',
+        }));
         Alert.alert("Success", result.message);
-        // Pass email and other data to the dashboard
         router.push({
           pathname: '/dashboard',
           params: {
-            email,
+            email: loginEmail,
             full_name: result.data?.full_name || 'User',
             user_id: result.data?.user_id || '',
           },
@@ -99,7 +121,7 @@ const Login = () => {
     }
   };
 
-  const handleBiometricLogin = async () => {
+  const handleBiometricLogin = async (biometricEmail = email) => {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       if (!compatible) {
@@ -119,7 +141,7 @@ const Login = () => {
       });
 
       if (result.success) {
-        handleLogin(true);
+        await handleLogin(true, biometricEmail);
       } else {
         Alert.alert("Error", "Biometric authentication failed");
       }
@@ -226,7 +248,7 @@ const Login = () => {
             </View>
             <TouchableOpacity 
               style={styles.biometricButton}
-              onPress={handleBiometricLogin}
+              onPress={() => handleBiometricLogin()}
             >
               <View style={styles.fingerprintIcon} />
               <Text style={styles.biometricText}>Use Fingerprint</Text>
