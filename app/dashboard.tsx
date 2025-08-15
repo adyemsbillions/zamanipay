@@ -154,10 +154,19 @@ const Dashboard = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, enable: true }),
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
+      console.log("Fingerprint enable raw response:", responseText);
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        throw new Error(`JSON Parse error: ${jsonError.message}, Response: ${responseText}`);
+      }
+      console.log("Fingerprint enable parsed response:", result);
 
       if (result.success) {
         Alert.alert("Success", result.message);
@@ -166,7 +175,8 @@ const Dashboard = () => {
         Alert.alert("Error", result.message);
       }
     } catch (error) {
-      Alert.alert("Error", "Network error: " + error.message);
+      console.error("Fingerprint enable error:", error.message);
+      Alert.alert("Error", "Failed to enable fingerprint: " + error.message);
     } finally {
       setIsLoading(false);
     }
@@ -206,12 +216,12 @@ const Dashboard = () => {
 
   const handleBottomNavPress = async (tab) => {
     if (tab === "Account") {
-      try {
-        await AsyncStorage.removeItem('userData');
-        router.replace("/login");
-      } catch (error) {
-        Alert.alert("Error", "Failed to log out: " + error.message);
-      }
+      router.push({
+        pathname: '/profile',
+        params: { email, full_name, user_id },
+      });
+    } else if (tab === "Home") {
+      fetchDashboardData();
     } else {
       Alert.alert("Navigation", `${tab} tab pressed`);
     }
@@ -376,9 +386,7 @@ const Dashboard = () => {
                   <View
                     style={[
                       styles.transactionIcon,
-                      transaction.type === "receive"
-                        ? styles.receiveIcon
-                        : styles.sendIconBg,
+                      transaction.type === "receive" ? styles.receiveIcon : styles.sendIconBg,
                     ]}
                   >
                     <MaterialIcons
@@ -445,8 +453,13 @@ const Dashboard = () => {
           style={styles.navItem}
           onPress={() => handleBottomNavPress("Statistic")}
         >
-          <MaterialIcons name="bar-chart" size={24} color="#6b7280" />
-          <Text style={styles.navText}>Statistic</Text>
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={() => handleBottomNavPress("Statistic")}
+          >
+            <MaterialIcons name="bar-chart" size={24} color="#6b7280" />
+            <Text style={styles.navText}>Statistic</Text>
+          </TouchableOpacity>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}

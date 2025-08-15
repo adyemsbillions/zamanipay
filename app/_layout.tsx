@@ -11,6 +11,7 @@ export default function Layout() {
         <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen name="forget_password" options={{ headerShown: false }} />
         <Stack.Screen name="dashboard" options={{ headerShown: false }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
       </Stack>
     </>
   );
