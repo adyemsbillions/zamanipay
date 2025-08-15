@@ -220,6 +220,16 @@ const Dashboard = () => {
         pathname: '/profile',
         params: { email, full_name, user_id },
       });
+    } else if (tab === "Pocket") {
+      router.push({
+        pathname: '/pocket',
+        params: { email, full_name, user_id },
+      });
+    } else if (tab === "Pay") {
+      router.push({
+        pathname: '/pay',
+        params: { email, full_name, user_id },
+      });
     } else if (tab === "Home") {
       fetchDashboardData();
     } else {
@@ -435,11 +445,7 @@ const Dashboard = () => {
           style={styles.navItem}
           onPress={() => handleBottomNavPress("Pocket")}
         >
-          <MaterialIcons
-            name="account-balance-wallet"
-            size={24}
-            color="#6b7280"
-          />
+          <MaterialIcons name="account-balance-wallet" size={24} color="#6b7280" />
           <Text style={styles.navText}>Pocket</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -453,13 +459,8 @@ const Dashboard = () => {
           style={styles.navItem}
           onPress={() => handleBottomNavPress("Statistic")}
         >
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => handleBottomNavPress("Statistic")}
-          >
-            <MaterialIcons name="bar-chart" size={24} color="#6b7280" />
-            <Text style={styles.navText}>Statistic</Text>
-          </TouchableOpacity>
+          <MaterialIcons name="bar-chart" size={24} color="#6b7280" />
+          <Text style={styles.navText}>Statistic</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
