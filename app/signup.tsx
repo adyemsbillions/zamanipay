@@ -88,7 +88,7 @@ const Signup = () => {
 
     try {
    
-      const response = await fetch('http://192.168.78.38/zamanipay/backend/signup.php', {
+      const response = await fetch('http://192.168.216.38/zamanipay/backend/signup.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
