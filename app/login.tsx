@@ -15,6 +15,7 @@ import {
 import { useRouter } from "expo-router";
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
 const { width, height } = Dimensions.get("window");
 
@@ -93,7 +94,16 @@ const Login = () => {
         }),
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
+      console.log("Login raw response:", responseText);
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        throw new Error(`JSON Parse error: ${jsonError.message}, Response: ${responseText}`);
+      }
+      console.log("Login parsed response:", result);
 
       if (result.success) {
         // Store user data in AsyncStorage
@@ -115,6 +125,7 @@ const Login = () => {
         Alert.alert("Error", result.message);
       }
     } catch (error) {
+      console.error("Login error:", error.message);
       Alert.alert("Error", "Network error: " + error.message);
     } finally {
       setIsLoading(false);
@@ -146,6 +157,7 @@ const Login = () => {
         Alert.alert("Error", "Biometric authentication failed");
       }
     } catch (error) {
+      console.error("Biometric login error:", error.message);
       Alert.alert("Error", "Biometric error: " + error.message);
     }
   };
@@ -250,7 +262,7 @@ const Login = () => {
               style={styles.biometricButton}
               onPress={() => handleBiometricLogin()}
             >
-              <View style={styles.fingerprintIcon} />
+              <MaterialIcons name="fingerprint" size={24} color="#1e40af" style={styles.fingerprintIcon} />
               <Text style={styles.biometricText}>Use Fingerprint</Text>
             </TouchableOpacity>
           </View>
@@ -472,10 +484,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   fingerprintIcon: {
-    width: 24,
-    height: 24,
-    backgroundColor: "#1e40af",
-    borderRadius: 12,
     marginRight: 12,
   },
   biometricText: {
